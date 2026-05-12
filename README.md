@@ -24,7 +24,7 @@ struct Player { float x, y; int health; };
 
 void onMain(){
 
-    nodepp::redux_t<Player> players;
+    redux_t<Player> players;
     
     auto h_player = players.create();
     
@@ -40,6 +40,17 @@ void onMain(){
     
 }
 ```
+
+## 🛰️ The "Why": Memory as a Protocol
+
+In traditional distributed systems, when you send a request, you store the context in a Lookup Table (HashMap) and wait for a response with a request_id. When the response arrives, the server wastes cycles searching, hashing, and resolving collisions to find the original state.
+
+NodePP Redux changes the game:
+
+- **State to Handle:** Instead of a random ID, Redux converts the actual memory pointer of your state into a PAC-Verified Handle ─ Pointer Authentication Code (64-bit token).
+- **Opaque Request:** You send this 8-byte handle over the wire as your request_id.
+- **Direct Recovery:** When the hook returns, the handle is the memory address.
+- **Zero-Search Validation:** Redux validates the handle's integrity in $O(1)$. If it’s valid, you have instant access to your state without a single hash table lookup.
 
 ## 🎯 Benchmarking the Logic
 

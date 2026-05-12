@@ -14,67 +14,105 @@
 
 /*────────────────────────────────────────────────────────────────────────────*/
 
-#include <nodepp/optional.h>
+#include "any.h"
 
 /*────────────────────────────────────────────────────────────────────────────*/
 
 namespace  nodepp { template< class T > class redux_t {
-protected: queue_t<ptr_t<T>> que; ulong mask;
+protected:
 
     /*─······································································─*/
 
-    ulong atob( void* object ) const noexcept {
-        
-        ulong dif = sizeof(ulong) * 8UL - 16UL;
-        ulong col = (ulong) object ^ (ulong) &que ;
-        ulong row = (ulong) object ^ (ulong) &mask;
-        ulong tmp = (ulong) object & 0x0000FFFFFFFFFFFF;
-        ulong sum = (col ^ row ^ (col >> 32) ^ (row >> 32)) & 0xFFFF;
-
-        return tmp | ( sum << dif );
-    }
-
-    void* btoa( ulong address ) const noexcept { 
-        if( que.empty() ){ return nullptr; }
-
-        void* raw = (void*) ( address & 0x0000FFFFFFFFFFFF );
-        ulong dif = sizeof(ulong) * 8UL - 16UL;
-        
-        ulong col = (ulong) raw ^ (ulong) &que ;
-        ulong row = (ulong) raw ^ (ulong) &mask;
-        ulong sum = (col ^ row ^ (col >> 32) ^ (row >> 32)) & 0xFFFF;
-
-    return ( (address>>dif) != sum ) ? nullptr : raw; }
-
-public: redux_t() {}
+    uint64_t msk1, msk2; queue_t<ptr_t<T>> que; 
 
     /*─······································································─*/
-    // crud - create read update delete
 
-    ulong create() const noexcept {
-        que.push( ptr_t<T>() ); return atob( que.last() );
+    uint64_t atob( void* address ) const noexcept {
+    uint64_t raw = ( (uint64_t) address ) & (((uint64_t)-1)>>16);
+    uint64_t msk = ( (uint64_t) msk1    ) & (((uint64_t)-1)>>16);
+    uint64_t col =   (uint64_t) address   ^   (uint64_t) msk2 ;
+
+        uint64_t sum = ( col^(col>>16)^(col>>32)^(col>>48)) & 0xffff;
+        return ( raw ^ msk ) | ( sum << 48 );
+
     }
 
-    int remove( ulong address ) const noexcept {
+    void* btoa( uint64_t address ) const noexcept {
+    uint64_t msk = ( (uint64_t)  msk1  )& (((uint64_t)-1)>>16);
+    void*    raw = (void*)((address^msk)& (((uint64_t)-1)>>16) );
+    uint64_t col = (uint64_t) raw       ^   (uint64_t) msk2 ;
+
+        uint64_t sum = ( col^(col>>16)^(col>>32)^(col>>48)) & 0xffff;
+        uint64_t out = ( address >>48) /*----------------*/ & 0xffff;
+        return out==sum ? raw : nullptr ; 
+
+    }
+
+public: redux_t() : msk1( (uint64_t) this ), msk2( (uint64_t) &que ) {}
+
+    uint64_t create() const noexcept { que.push( ptr_t<T>() ); return atob( que.last() ); }
+
+    int remove( uint64_t address ) const noexcept {
+        if  ( que.empty() )/**/{ return -1; }
+        auto  ptr = que.as( btoa( address ) );
+        if  ( ptr == nullptr ) { return -1; } 
+    que.erase( ptr ); return 1; }
+
+    bool has( uint64_t address ) const noexcept {
+        if  ( que.empty() )/*-*/{ return false; }
         void* ptr = btoa( address );
-        if  ( ptr == nullptr ){ return -1; } 
-        que.erase( que.as( ptr ) );
+        if  ( ptr == nullptr )  { return false; }
+    return que.is_valid( ptr ); }
+
+    int update( T value, uint64_t address ) const noexcept {
+        if  ( que.empty() )/**/{ return -1; }
+        auto  ptr = que.as( btoa( address ) );
+        if  ( ptr == nullptr ) { return -1; }
+        ptr->data = ptr_t<T>( 0UL, T(value) );
     return 1; }
 
-    ulong update( T value, ulong address ) const noexcept {
-        void* ptr = btoa( address );
-        if  ( ptr == nullptr ){ return 0; }
-        que.as( ptr )->data = type::bind( value ); 
-    return address; }
+    ptr_t<T> read( uint64_t address ) const noexcept {
+        if  ( que.empty() )/*-*/{ return nullptr; }
+        auto  ptr = que.as( btoa( address ) );
+        if  ( ptr == nullptr )  { return nullptr; }
+        auto  raw = ptr->data;
+        if  ( raw.null() )/*--*/{ return nullptr; } 
+    return raw; }
 
-    optional_t<T> read( ulong address ) const noexcept {
-        void* ptr = btoa( address );
-        if  ( ptr == nullptr ){ return nullptr; }
-        auto  raw = que.as( ptr )->data;
-        if  ( raw.null() )/**/{ return nullptr; } 
-    return *( raw ); }
+    /*─······································································─*/
+
+    uint64_t get_handler( void* raw ) const noexcept {
+        if( !que.is_valid( raw ) ){ return 0UL; }
+    return atob( raw ); }
+
+    /*─······································································─*/
+
+    void  clear() const noexcept { /*--*/ que.clear(); }
+    ulong  size() const noexcept { return que.size (); }
+    bool  empty() const noexcept { return que.empty(); }
+
+    /*─······································································─*/
+
+    template< class F >
+    void dispatch( uint64_t handle, const F& action ) const noexcept {
+        auto state = this->read(handle); if( !state.null() ){
+              action( *state );
+        this->update( *state , handle ); }
+    }
+
+    /*─······································································─*/
+
+    const queue_t<ptr_t<T>>* operator->() const noexcept { return &que; }
+    const queue_t<ptr_t<T>>& get_data  () const noexcept { return  que; }
+    const queue_t<ptr_t<T>>& get_queue () const noexcept { return  que; }
+
+    /*─······································································─*/
+
+    bool is_valid( uint64_t address ) const noexcept { return btoa( address )!=nullptr; }
 
 }; }
+
+/*────────────────────────────────────────────────────────────────────────────*/
 
 #endif
 

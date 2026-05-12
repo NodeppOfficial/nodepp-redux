@@ -7,7 +7,7 @@ struct Player { float x, y; int health; };
 
 void onMain(){
 
-    nodepp::redux_t<Player> players;
+    redux_t<Player> players;
     
     auto h_player = players.create();
     
