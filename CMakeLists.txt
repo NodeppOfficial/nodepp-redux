@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.6)
 project(nodepp-redux VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -17,4 +17,4 @@ endif()
 # interface-target
 add_library(nodepp-redux INTERFACE)
 target_include_directories(nodepp-redux INTERFACE ${NODEPP_REDUX_INCLUDE_DIR})
-target_link_libraries(nodepp-redux INTERFACE nodepp ) #------------------------#
+target_link_libraries(nodepp-redux INTERFACE nodepp )
